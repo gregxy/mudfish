@@ -3,6 +3,20 @@ name = "mudfish"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "mudfish"
+path = "src/lib.rs"
+
 [dependencies]
 regex = "1"
 simple-error = "0.2"
+clap = { version = "3", features = ["derive"], optional = true }
+
+[features]
+build-binary = ["clap"]
+
+
+[[bin]]
+name = "pgnreader"
+path = "src/bin/pgnreader/main.rs"
+required-features = ["build-binary"]

@@ -119,7 +119,10 @@ impl PgnReader {
                 }
             }
 
-            if self.state == ReaderState::Moves {
+            if self.state == ReaderState::Moves ||
+                self.state == ReaderState::InBetween ||
+                self.state == ReaderState::Tags {
+                self.state = ReaderState::Moves;
                 pgn.moves.push_str(trimmed);
                 continue;
             }
