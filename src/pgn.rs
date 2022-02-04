@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Seek;
+use std::io::SeekFrom;
 use std::path::Path;
 
 use regex::Regex;
@@ -18,7 +19,6 @@ pub struct RawPgn {
 enum ReaderState {
     Start,
     Tags,
-    InBetween,
     Moves,
     Ended,
 }
@@ -31,9 +31,10 @@ pub struct PgnReader {
 }
 
 #[derive(Debug)]
-pub enum PgnReaderStatus {
-    End,
-    EndUnexpectedly,
+pub enum ReadOutcome {
+    Game(RawPgn),
+    Ended,
+    EndedUnexpectedly,
     IoError(std::io::Error),
     ParseError(SimpleError),
 }
@@ -50,9 +51,9 @@ impl PgnReader {
         })
     }
 
-    pub fn read_next(&mut self) -> Result<RawPgn, PgnReaderStatus> {
+    pub fn read_next(&mut self) -> ReadOutcome {
         if self.state == ReaderState::Ended {
-            return Err(PgnReaderStatus::End);
+            return ReadOutcome::Ended;
         }
 
         let mut pgn = RawPgn::default();
@@ -63,23 +64,24 @@ impl PgnReader {
             let read_result = self.buf.read_line(&mut line);
 
             if let Err(e) = read_result {
-                return Err(PgnReaderStatus::IoError(e));
+                self.state = ReaderState::Ended;
+                return ReadOutcome::IoError(e);
             }
 
             if read_result.unwrap() == 0 {
                 // end
                 match self.state {
-                    ReaderState::Start => {
-                        self.state = ReaderState::Ended;
-                        return Err(PgnReaderStatus::End);
-                    }
                     ReaderState::Moves => {
                         self.state = ReaderState::Ended;
-                        return Ok(pgn);
+                        return ReadOutcome::Game(pgn);
+                    }
+                    ReaderState::Tags => {
+                        self.state = ReaderState::Ended;
+                        return ReadOutcome::EndedUnexpectedly;
                     }
                     _ => {
                         self.state = ReaderState::Ended;
-                        return Err(PgnReaderStatus::EndUnexpectedly);
+                        return ReadOutcome::Ended;
                     }
                 }
             }
@@ -89,11 +91,7 @@ impl PgnReader {
                 match self.state {
                     ReaderState::Moves => {
                         self.state = ReaderState::Start;
-                        return Ok(pgn);
-                    }
-                    ReaderState::Tags => {
-                        self.state = ReaderState::InBetween;
-                        continue;
+                        return ReadOutcome::Game(pgn);
                     }
                     _ => continue,
                 }
@@ -103,13 +101,12 @@ impl PgnReader {
                 match self.state {
                     ReaderState::Moves => {
                         self.state = ReaderState::Start;
-                        let r = self
-                            .buf
-                            .seek(std::io::SeekFrom::Current(-(line.len() as i64)));
+                        let r = self.buf.seek(SeekFrom::Current(-(line.len() as i64)));
                         if let Err(e) = r {
-                            return Err(PgnReaderStatus::IoError(e));
+                            self.state = ReaderState::Ended;
+                            return ReadOutcome::IoError(e);
                         }
-                        return Ok(pgn);
+                        return ReadOutcome::Game(pgn);
                     }
                     _ => {
                         self.state = ReaderState::Tags;
@@ -119,18 +116,20 @@ impl PgnReader {
                 }
             }
 
-            if self.state == ReaderState::Moves ||
-                self.state == ReaderState::InBetween ||
-                self.state == ReaderState::Tags {
-                self.state = ReaderState::Moves;
-                pgn.moves.push_str(trimmed);
-                continue;
+            match self.state {
+                ReaderState::Moves => pgn.moves.push_str(trimmed),
+                ReaderState::Tags => {
+                    self.state = ReaderState::Moves;
+                    pgn.moves.push_str(trimmed);
+                }
+                _ => {
+                    self.state = ReaderState::Ended;
+                    return ReadOutcome::ParseError(SimpleError::new(format!(
+                        "Unexpected line ({}): {}",
+                        self.line_number, line
+                    )));
+                }
             }
-
-            return Err(PgnReaderStatus::ParseError(SimpleError::new(format!(
-                "Unexpected line ({}): {}",
-                self.line_number, line
-            ))));
         }
     }
 }
