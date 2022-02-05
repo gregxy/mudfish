@@ -8,6 +8,7 @@ name = "mudfish"
 path = "src/lib.rs"
 
 [dependencies]
+bzip2 = "0.4"
 regex = "1"
 simple-error = "0.2"
 clap = { version = "3", features = ["derive"], optional = true }

@@ -5,6 +5,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
 
+use bzip2::read::BzDecoder;
 use regex::Regex;
 use simple_error::SimpleError;
 use simple_error::SimpleResult;
@@ -39,6 +40,10 @@ pub enum ReadOutcome {
     ParseError(SimpleError),
 }
 
+pub trait ReadPgn {
+    fn read_next(&mut self) -> ReadOutcome;
+}
+
 impl PgnReader<File> {
     pub fn new<P: AsRef<Path>>(path: P) -> SimpleResult<Self> {
         let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
@@ -52,11 +57,24 @@ impl PgnReader<File> {
     }
 }
 
-impl<R> PgnReader<R>
+impl PgnReader<BzDecoder<File>> {
+    pub fn from_bzip2<P: AsRef<Path>>(path: P) -> SimpleResult<Self> {
+        let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
+
+        Ok(Self {
+            buf: BufReader::new(BzDecoder::new(f)),
+            state: ReaderState::Start,
+            re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]+)"\]"#).unwrap(),
+            line_number: 0,
+        })
+    }
+}
+
+impl<R> ReadPgn for PgnReader<R>
 where
     R: Read,
 {
-    pub fn read_next(&mut self) -> ReadOutcome {
+    fn read_next(&mut self) -> ReadOutcome {
         if self.state == ReaderState::Ended {
             return ReadOutcome::Ended;
         }
