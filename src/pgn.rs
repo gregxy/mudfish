@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Seek;
-use std::io::SeekFrom;
+use std::io::Read;
 use std::path::Path;
 
 use regex::Regex;
 use simple_error::SimpleError;
+use simple_error::SimpleResult;
 
 #[derive(Default, Debug)]
 pub struct RawPgn {
@@ -23,8 +23,8 @@ enum ReaderState {
     Ended,
 }
 
-pub struct PgnReader {
-    buf: BufReader<File>,
+pub struct PgnReader<R> {
+    buf: BufReader<R>,
     state: ReaderState,
     re_tag: Regex,
     line_number: u64,
@@ -39,9 +39,9 @@ pub enum ReadOutcome {
     ParseError(SimpleError),
 }
 
-impl PgnReader {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
-        let f = File::open(path)?;
+impl PgnReader<File> {
+    pub fn new<P: AsRef<Path>>(path: P) -> SimpleResult<Self> {
+        let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
 
         Ok(Self {
             buf: BufReader::new(f),
@@ -50,7 +50,12 @@ impl PgnReader {
             line_number: 0,
         })
     }
+}
 
+impl<R> PgnReader<R>
+where
+    R: Read,
+{
     pub fn read_next(&mut self) -> ReadOutcome {
         if self.state == ReaderState::Ended {
             return ReadOutcome::Ended;
@@ -100,13 +105,11 @@ impl PgnReader {
             if let Some(caps) = self.re_tag.captures(trimmed) {
                 match self.state {
                     ReaderState::Moves => {
-                        self.state = ReaderState::Start;
-                        let r = self.buf.seek(SeekFrom::Current(-(line.len() as i64)));
-                        if let Err(e) = r {
-                            self.state = ReaderState::Ended;
-                            return ReadOutcome::IoError(e);
-                        }
-                        return ReadOutcome::Game(pgn);
+                        self.state = ReaderState::Ended;
+                        return ReadOutcome::ParseError(SimpleError::new(format!(
+                            "No empty line between moves and tags ({})",
+                            self.line_number
+                        )));
                     }
                     _ => {
                         self.state = ReaderState::Tags;
