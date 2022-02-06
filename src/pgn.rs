@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Read;
-use std::path::Path;
 
 use bzip2::read::BzDecoder;
 use regex::Regex;
@@ -24,8 +22,8 @@ enum ReaderState {
     Ended,
 }
 
-pub struct PgnReader<R> {
-    buf: BufReader<R>,
+pub struct PgnReader {
+    buf: Box<dyn BufRead>,
     state: ReaderState,
     re_tag: Regex,
     line_number: u64,
@@ -40,41 +38,27 @@ pub enum ReadOutcome {
     ParseError(SimpleError),
 }
 
-pub trait ReadPgn {
-    fn read_next(&mut self) -> ReadOutcome;
-}
-
-impl PgnReader<File> {
-    pub fn new<P: AsRef<Path>>(path: P) -> SimpleResult<Self> {
+impl PgnReader {
+    pub fn new(path: &str) -> SimpleResult<Self> {
         let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
 
+        let buf: Box<dyn BufRead> =
+            if path.ends_with(".bz2") {
+                Box::new(BufReader::new(BzDecoder::new(f)))
+            }
+            else {
+                Box::new(BufReader::new(f))
+            };
+
         Ok(Self {
-            buf: BufReader::new(f),
+            buf,
             state: ReaderState::Start,
             re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]+)"\]"#).unwrap(),
             line_number: 0,
         })
     }
-}
 
-impl PgnReader<BzDecoder<File>> {
-    pub fn from_bzip2<P: AsRef<Path>>(path: P) -> SimpleResult<Self> {
-        let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
-
-        Ok(Self {
-            buf: BufReader::new(BzDecoder::new(f)),
-            state: ReaderState::Start,
-            re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]+)"\]"#).unwrap(),
-            line_number: 0,
-        })
-    }
-}
-
-impl<R> ReadPgn for PgnReader<R>
-where
-    R: Read,
-{
-    fn read_next(&mut self) -> ReadOutcome {
+    pub fn read_next(&mut self) -> ReadOutcome {
         if self.state == ReaderState::Ended {
             return ReadOutcome::Ended;
         }

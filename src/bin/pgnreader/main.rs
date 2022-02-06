@@ -1,4 +1,4 @@
-use mudfish::{PgnReader, ReadOutcome, ReadPgn};
+use mudfish::{PgnReader, ReadOutcome};
 
 use clap::Parser;
 
@@ -14,12 +14,7 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let mut reader: Box<dyn ReadPgn> = if args.pgnfile.ends_with("bz2") {
-        Box::new(PgnReader::from_bzip2(args.pgnfile)?)
-    } else {
-        Box::new(PgnReader::new(args.pgnfile)?)
-    };
-
+    let mut reader = PgnReader::new(args.pgnfile.as_str())?;
     let mut count: u64 = 0;
 
     loop {
