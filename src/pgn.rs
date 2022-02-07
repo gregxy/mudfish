@@ -42,13 +42,11 @@ impl PgnReader {
     pub fn new(path: &str) -> SimpleResult<Self> {
         let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
 
-        let buf: Box<dyn BufRead> =
-            if path.ends_with(".bz2") {
-                Box::new(BufReader::new(BzDecoder::new(f)))
-            }
-            else {
-                Box::new(BufReader::new(f))
-            };
+        let buf: Box<dyn BufRead> = if path.ends_with(".bz2") {
+            Box::new(BufReader::new(BzDecoder::new(f)))
+        } else {
+            Box::new(BufReader::new(f))
+        };
 
         Ok(Self {
             buf,
