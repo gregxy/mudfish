@@ -1,8 +1,7 @@
 mod pgn;
 pub use pgn::*;
 
-mod store;
-pub use store::*;
+pub mod store;
 
 #[cfg(test)]
 mod tests {

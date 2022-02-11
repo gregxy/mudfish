@@ -22,3 +22,9 @@ build-binary = ["clap"]
 name = "pgnreader"
 path = "src/bin/pgnreader/main.rs"
 required-features = ["build-binary"]
+
+
+[[bin]]
+name = "storepgn"
+path = "src/bin/storepgn/main.rs"
+required-features = ["build-binary"]

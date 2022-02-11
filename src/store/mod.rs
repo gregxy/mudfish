@@ -2,7 +2,7 @@ use crate::pgn::RawPgn;
 use simple_error::SimpleResult;
 
 pub trait SavePgn {
-    fn upsert_pgn(&self, name: &str, pgn: &RawPgn) -> SimpleResult<()>;
+    fn upsert_pgn<S: Into<String>>(&self, name: S, pgn: &RawPgn) -> SimpleResult<()>;
 }
 
 mod sqlite;
