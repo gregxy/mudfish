@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 bzip2 = "0.4"
+postgres = "0.19"
 regex = "1"
 rusqlite = "0.26"
 simple-error = "0.2"

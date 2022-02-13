@@ -1,7 +1,10 @@
 use std::path::Path;
 
+//use mudfish::store::SqliteStore;
+use mudfish::store::SavePgn;
+use mudfish::store::PostgresStore;
+
 use mudfish::{PgnReader, ReadOutcome};
-use mudfish::store::{SqliteStore, SavePgn};
 
 use clap::Parser;
 
@@ -28,13 +31,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = PgnReader::new(args.pgnfile.as_str())?;
     let mut count: usize = 0;
 
-    let store = SqliteStore::open(args.target.as_str(), args.table)?;
+    let mut store = PostgresStore::open(args.target.as_str(), args.table)?;
     loop {
         match reader.read_next() {
             ReadOutcome::Game(pgn) => {
                 count += 1;
                 if count > args.skip_first {
-                    if let Err(err) = store.upsert_pgn(format!("{}.{}", name, count), &pgn) {
+                    if let Err(err) = store.upsert_pgn(format!("{}.{}", name, count).as_str(), &pgn) {
                         return Err(Box::new(err));
                     }
                 }

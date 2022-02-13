@@ -120,7 +120,12 @@ impl PgnReader {
             }
 
             match self.state {
-                ReaderState::Moves => pgn.moves.push_str(trimmed),
+                ReaderState::Moves => {
+                    if !pgn.moves.is_empty() {
+                        pgn.moves.push_str(" ");
+                    }
+                    pgn.moves.push_str(trimmed);
+                }
                 ReaderState::Tags => {
                     self.state = ReaderState::Moves;
                     pgn.moves.push_str(trimmed);

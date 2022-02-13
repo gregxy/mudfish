@@ -1,46 +1,31 @@
-use std::path::Path;
-
-use rusqlite::params;
-use rusqlite::Connection;
-use simple_error::simple_error;
-use simple_error::SimpleResult;
+use postgres::{Client, NoTls};
 
 use crate::pgn::RawPgn;
 use crate::store::SavePgn;
+use simple_error::simple_error;
+use simple_error::SimpleResult;
 
-pub struct SqliteStore {
+pub struct PostgresStore {
+    client: Client,
     table: String,
-    connection: Connection,
     empty: String,
     insert_statement: String,
 }
 
-impl SqliteStore {
-    pub fn open<P: AsRef<Path>, S: Into<String>>(path: P, table: S) -> SimpleResult<Self> {
-        let connection = Connection::open(path).map_err(|e| simple_error!(e.to_string()))?;
+impl PostgresStore {
+    pub fn open<S: Into<String>>(target: &str, table: S) -> SimpleResult<Self> {
+        let client = Client::connect(target, NoTls).map_err(|e| simple_error!(e.to_string()))?;
 
-        SqliteStore::internal_open(table, connection)
-    }
-
-    pub fn open_in_memory<S: Into<String>>(table: S) -> SimpleResult<Self> {
-        let connection = Connection::open_in_memory().map_err(|e| simple_error!(e.to_string()))?;
-
-        SqliteStore::internal_open(table, connection)
-    }
-
-    fn internal_open<S: Into<String>>(table: S, connection: Connection) -> SimpleResult<Self> {
         let mut store = Self {
+            client,
             table: table.into(),
-            connection,
             empty: String::new(),
             insert_statement: String::new(),
         };
 
-        store.construct_statements();
+        store.create_table()?;
 
-        if let Err(err) = store.create_table() {
-            return Err(err);
-        }
+        store.construct_statements();
 
         Ok(store)
     }
@@ -69,30 +54,49 @@ impl SqliteStore {
     			moves
     		)
     		VALUES(
-    			?1,
-    			?2,
-    			?3,
-    			?4,
-    			?5,
-    			?6,
-    			?7,
-    			?8,
-    			?9,
-    			?10,
-    			?11,
-    			?12,
-    			?13,
-    			?14,
-    			?15,
-    			?16,
-                ?17,
-                ?18,
-                ?19)",
+    			$1,
+    			$2,
+    			$3,
+    			$4,
+    			$5,
+    			$6,
+    			$7,
+    			$8,
+    			$9,
+    			$10,
+    			$11,
+    			$12,
+    			$13,
+    			$14,
+    			$15,
+    			$16,
+                $17,
+                $18,
+                $19)
+            ON CONFLICT (id) DO UPDATE SET
+            	event = $2,
+            	site = $3,
+            	round = $4,
+    			date = $5,
+    			time = $6,
+    			white = $7,
+    			white_title = $8,
+    			white_elo = $9,
+    			white_fide = $10,
+    			black = $11,
+                black_title = $12,
+                black_elo = $13,
+    			black_fide = $14,
+    			eco = $15,
+    			opening = $16,
+    			variation = $17,
+                result = $18,
+    			moves = $19",
             self.table.as_str()
         );
     }
 
-    fn create_table(&self) -> SimpleResult<()> {
+    fn create_table(&mut self) -> SimpleResult<()> {
         let statement = format!(
             "CREATE TABLE IF NOT EXISTS {} (
                     id          VARCHAR(255)    NOT NULL PRIMARY KEY,
@@ -119,8 +123,8 @@ impl SqliteStore {
         );
 
         return self
-            .connection
-            .execute(statement.as_str(), [])
+            .client
+            .execute(statement.as_str(), &[])
             .map(|_| ())
             .map_err(|err| simple_error!(err.to_string()));
     }
@@ -134,14 +138,14 @@ fn parse_to_number(o: Option<&String>) -> i32 {
     0
 }
 
-impl SavePgn for SqliteStore {
+impl SavePgn for PostgresStore {
     fn upsert_pgn(&mut self, name: &str, pgn: &RawPgn) -> SimpleResult<()> {
         return self
-            .connection
+            .client
             .execute(
                 self.insert_statement.as_str(),
-                params![
-                    name,
+                &[
+                    &name.to_string(),
                     pgn.tags.get("Event").unwrap_or(&self.empty),
                     pgn.tags.get("Site").unwrap_or(&self.empty),
                     pgn.tags.get("Round").unwrap_or(&self.empty),
@@ -149,17 +153,17 @@ impl SavePgn for SqliteStore {
                     pgn.tags.get("Time").unwrap_or(&self.empty),
                     pgn.tags.get("White").unwrap_or(&self.empty),
                     pgn.tags.get("WhiteTitle").unwrap_or(&self.empty),
-                    parse_to_number(pgn.tags.get("WhiteElo")),
-                    parse_to_number(pgn.tags.get("WhiteFideId")),
+                    &parse_to_number(pgn.tags.get("WhiteElo")),
+                    &parse_to_number(pgn.tags.get("WhiteFideId")),
                     pgn.tags.get("Black").unwrap_or(&self.empty),
                     pgn.tags.get("BlackTitle").unwrap_or(&self.empty),
-                    parse_to_number(pgn.tags.get("BlackElo")),
-                    parse_to_number(pgn.tags.get("BlackFideId")),
+                    &parse_to_number(pgn.tags.get("BlackElo")),
+                    &parse_to_number(pgn.tags.get("BlackFideId")),
                     pgn.tags.get("ECO").unwrap_or(&self.empty),
                     pgn.tags.get("Opening").unwrap_or(&self.empty),
                     pgn.tags.get("Variation").unwrap_or(&self.empty),
                     pgn.tags.get("Result").unwrap_or(&self.empty),
-                    pgn.moves,
+                    &pgn.moves,
                 ],
             )
             .map(|_| ())
