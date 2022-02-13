@@ -11,7 +11,6 @@ path = "src/lib.rs"
 bzip2 = "0.4"
 postgres = "0.19"
 regex = "1"
-rusqlite = "0.26"
 simple-error = "0.2"
 clap = { version = "3", features = ["derive"], optional = true }
 
