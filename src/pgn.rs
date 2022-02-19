@@ -51,7 +51,7 @@ impl PgnReader {
         Ok(Self {
             buf,
             state: ReaderState::Start,
-            re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]+)"\]"#).unwrap(),
+            re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]*)"\]"#).unwrap(),
             line_number: 0,
         })
     }
