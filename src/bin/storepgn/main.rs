@@ -1,8 +1,8 @@
 use std::path::Path;
 
 //use mudfish::store::SqliteStore;
-use mudfish::store::SavePgn;
 use mudfish::store::PostgresStore;
+use mudfish::store::SavePgn;
 
 use mudfish::{PgnReader, ReadOutcome};
 
@@ -37,7 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ReadOutcome::Game(pgn) => {
                 count += 1;
                 if count > args.skip_first {
-                    if let Err(err) = store.upsert_pgn(format!("{}.{}", name, count).as_str(), &pgn) {
+                    if let Err(err) = store.upsert_pgn(format!("{}.{}", name, count).as_str(), &pgn)
+                    {
                         return Err(Box::new(err));
                     }
                 }

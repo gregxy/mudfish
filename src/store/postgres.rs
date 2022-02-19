@@ -153,7 +153,9 @@ impl SavePgn for PostgresStore {
                     pgn.tags.get("Event").unwrap_or(&self.empty),
                     pgn.tags.get("Site").unwrap_or(&self.empty),
                     pgn.tags.get("Round").unwrap_or(&self.empty),
-                    pgn.tags.get("Date").unwrap_or(pgn.tags.get("UTCDate").unwrap_or(&self.empty)),
+                    pgn.tags
+                        .get("Date")
+                        .unwrap_or(pgn.tags.get("UTCDate").unwrap_or(&self.empty)),
                     pgn.tags.get("UTCTime").unwrap_or(&self.empty),
                     pgn.tags.get("TimeControl").unwrap_or(&self.empty),
                     pgn.tags.get("White").unwrap_or(&self.empty),

@@ -34,7 +34,7 @@ pub enum ReadOutcome {
     Game(RawPgn),
     Ended,
     EndedUnexpectedly,
-    IoError(std::io::Error),
+    IoError(SimpleError),
     ParseError(SimpleError),
 }
 
@@ -70,7 +70,10 @@ impl PgnReader {
 
             if let Err(e) = read_result {
                 self.state = ReaderState::Ended;
-                return ReadOutcome::IoError(e);
+                return ReadOutcome::IoError(SimpleError::new(format!(
+                    "line {}: {}",
+                    self.line_number, e.to_string()
+                )));
             }
 
             if read_result.unwrap() == 0 {
