@@ -1,17 +1,30 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::path::Path;
 
 use bzip2::read::BzDecoder;
 use regex::Regex;
+use simple_error::simple_error;
 use simple_error::SimpleError;
 use simple_error::SimpleResult;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct RawPgn {
-    pub tags: HashMap<String, String>,
+    pub id: String,
+    pub tags: BTreeMap<String, String>,
     pub moves: String,
+}
+
+impl RawPgn {
+    pub fn new(prefix: impl std::fmt::Display, index: usize) -> RawPgn {
+        Self {
+            id: format!("{}.{}", prefix, index),
+            tags: BTreeMap::new(),
+            moves: String::new(),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -23,10 +36,13 @@ enum ReaderState {
 }
 
 pub struct PgnReader {
+    prefix: String,
     buf: Box<dyn BufRead>,
     state: ReaderState,
     re_tag: Regex,
-    line_number: u64,
+    line_number: usize,
+    count: usize,
+    last_pgn: Option<RawPgn>,
 }
 
 #[derive(Debug)]
@@ -39,20 +55,33 @@ pub enum ReadOutcome {
 }
 
 impl PgnReader {
-    pub fn new(path: &str) -> SimpleResult<Self> {
-        let f = File::open(path).map_err(|e| SimpleError::new(e.to_string()))?;
+    pub fn new(path: &Path) -> SimpleResult<Self> {
+        let f = File::open(path).map_err(|e| simple_error!(e.to_string()))?;
 
-        let buf: Box<dyn BufRead> = if path.ends_with(".bz2") {
+        let buf: Box<dyn BufRead> = if path.extension().unwrap() == "bz" {
             Box::new(BufReader::new(BzDecoder::new(f)))
         } else {
             Box::new(BufReader::new(f))
         };
 
+        let prefix: String = path
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap()
+            .to_string();
+
         Ok(Self {
             buf,
+            prefix,
             state: ReaderState::Start,
             re_tag: Regex::new(r#"\[([[:word:]]+)\s+"([^"]*)"\]"#).unwrap(),
             line_number: 0,
+            count: 0,
+            last_pgn: None,
         })
     }
 
@@ -61,7 +90,16 @@ impl PgnReader {
             return ReadOutcome::Ended;
         }
 
-        let mut pgn = RawPgn::default();
+        let mut pgn = if self.last_pgn.is_some() {
+            self.last_pgn.take().unwrap()
+        } else {
+            RawPgn::new(self.prefix.as_str(), self.count)
+        };
+
+        if pgn.tags.is_empty() {
+            self.count += 1;
+        }
+
         loop {
             let mut line = String::new();
             self.line_number += 1;
@@ -70,10 +108,11 @@ impl PgnReader {
 
             if let Err(e) = read_result {
                 self.state = ReaderState::Ended;
-                return ReadOutcome::IoError(SimpleError::new(format!(
+                return ReadOutcome::IoError(simple_error!(
                     "line {}: {}",
-                    self.line_number, e.to_string()
-                )));
+                    self.line_number,
+                    e.to_string()
+                ));
             }
 
             if read_result.unwrap() == 0 {
@@ -96,23 +135,19 @@ impl PgnReader {
 
             let trimmed = line.trim();
             if trimmed.is_empty() {
-                match self.state {
-                    ReaderState::Moves => {
-                        self.state = ReaderState::Start;
-                        return ReadOutcome::Game(pgn);
-                    }
-                    _ => continue,
-                }
+                continue;
             }
 
             if let Some(caps) = self.re_tag.captures(trimmed) {
                 match self.state {
                     ReaderState::Moves => {
-                        self.state = ReaderState::Ended;
-                        return ReadOutcome::ParseError(SimpleError::new(format!(
-                            "No empty line between moves and tags ({})",
-                            self.line_number
-                        )));
+                        self.state = ReaderState::Tags;
+                        let mut new_pgn = RawPgn::new(self.prefix.as_str(), self.count);
+                        new_pgn
+                            .tags
+                            .insert(caps[1].to_string(), caps[2].to_string());
+                        self.last_pgn = Some(new_pgn);
+                        self.count += 1;
                     }
                     _ => {
                         self.state = ReaderState::Tags;
@@ -125,7 +160,7 @@ impl PgnReader {
             match self.state {
                 ReaderState::Moves => {
                     if !pgn.moves.is_empty() {
-                        pgn.moves.push_str(" ");
+                        pgn.moves.push(' ');
                     }
                     pgn.moves.push_str(trimmed);
                 }

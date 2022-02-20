@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let p = Path::new(args.pgnfile.as_str());
     let name = String::from(p.file_stem().unwrap().to_str().unwrap());
 
-    let mut reader = PgnReader::new(args.pgnfile.as_str())?;
+    let mut reader = PgnReader::new(p)?;
     let mut count: usize = 0;
 
     let mut store = PostgresStore::open(args.target.as_str(), args.table)?;
