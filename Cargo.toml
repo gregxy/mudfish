@@ -12,6 +12,7 @@ bzip2 = "0.4"
 postgres = "0.19"
 regex = "1"
 simple-error = "0.2"
+whoami = "1.2"
 clap = { version = "3", features = ["derive"], optional = true }
 
 [features]
@@ -19,12 +20,6 @@ build-binary = ["clap"]
 
 
 [[bin]]
-name = "pgnreader"
-path = "src/bin/pgnreader/main.rs"
-required-features = ["build-binary"]
-
-
-[[bin]]
-name = "storepgn"
-path = "src/bin/storepgn/main.rs"
+name = "pgncat"
+path = "src/bin/pgncat/main.rs"
 required-features = ["build-binary"]

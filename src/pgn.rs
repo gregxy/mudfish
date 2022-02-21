@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -13,16 +13,18 @@ use simple_error::SimpleResult;
 #[derive(Debug)]
 pub struct RawPgn {
     pub id: String,
-    pub tags: BTreeMap<String, String>,
-    pub moves: String,
+    pub tags: HashMap<String, String>,
+    pub tags_text: String,
+    pub moves_text: String,
 }
 
 impl RawPgn {
     pub fn new(prefix: impl std::fmt::Display, index: usize) -> RawPgn {
         Self {
             id: format!("{}.{}", prefix, index),
-            tags: BTreeMap::new(),
-            moves: String::new(),
+            tags: HashMap::new(),
+            tags_text: String::new(),
+            moves_text: String::new(),
         }
     }
 }
@@ -49,16 +51,14 @@ pub struct PgnReader {
 pub enum ReadOutcome {
     Game(RawPgn),
     Ended,
-    EndedUnexpectedly,
-    IoError(SimpleError),
-    ParseError(SimpleError),
+    Error(SimpleError),
 }
 
 impl PgnReader {
     pub fn new(path: &Path) -> SimpleResult<Self> {
         let f = File::open(path).map_err(|e| simple_error!(e.to_string()))?;
 
-        let buf: Box<dyn BufRead> = if path.extension().unwrap() == "bz" {
+        let buf: Box<dyn BufRead> = if path.extension().unwrap() == "bz2" {
             Box::new(BufReader::new(BzDecoder::new(f)))
         } else {
             Box::new(BufReader::new(f))
@@ -93,12 +93,9 @@ impl PgnReader {
         let mut pgn = if self.last_pgn.is_some() {
             self.last_pgn.take().unwrap()
         } else {
+            self.count += 1;
             RawPgn::new(self.prefix.as_str(), self.count)
         };
-
-        if pgn.tags.is_empty() {
-            self.count += 1;
-        }
 
         loop {
             let mut line = String::new();
@@ -108,8 +105,8 @@ impl PgnReader {
 
             if let Err(e) = read_result {
                 self.state = ReaderState::Ended;
-                return ReadOutcome::IoError(simple_error!(
-                    "line {}: {}",
+                return ReadOutcome::Error(simple_error!(
+                    "Line {}: {}",
                     self.line_number,
                     e.to_string()
                 ));
@@ -124,7 +121,10 @@ impl PgnReader {
                     }
                     ReaderState::Tags => {
                         self.state = ReaderState::Ended;
-                        return ReadOutcome::EndedUnexpectedly;
+                        return ReadOutcome::Error(simple_error!(
+                            "Line {}: Ended unexpectedly.",
+                            self.line_number
+                        ));
                     }
                     _ => {
                         self.state = ReaderState::Ended;
@@ -142,15 +142,21 @@ impl PgnReader {
                 match self.state {
                     ReaderState::Moves => {
                         self.state = ReaderState::Tags;
+                        self.count += 1;
                         let mut new_pgn = RawPgn::new(self.prefix.as_str(), self.count);
                         new_pgn
                             .tags
                             .insert(caps[1].to_string(), caps[2].to_string());
+                        new_pgn.tags_text.push_str(trimmed);
+                        new_pgn.tags_text.push('\n');
                         self.last_pgn = Some(new_pgn);
-                        self.count += 1;
+
+                        return ReadOutcome::Game(pgn);
                     }
                     _ => {
                         self.state = ReaderState::Tags;
+                        pgn.tags_text.push_str(trimmed);
+                        pgn.tags_text.push('\n');
                         pgn.tags.insert(caps[1].to_string(), caps[2].to_string());
                         continue;
                     }
@@ -159,21 +165,21 @@ impl PgnReader {
 
             match self.state {
                 ReaderState::Moves => {
-                    if !pgn.moves.is_empty() {
-                        pgn.moves.push(' ');
-                    }
-                    pgn.moves.push_str(trimmed);
+                    pgn.moves_text.push_str(trimmed);
+                    pgn.moves_text.push('\n');
                 }
                 ReaderState::Tags => {
+                	pgn.moves_text.push_str(trimmed);
+                    pgn.moves_text.push('\n');
                     self.state = ReaderState::Moves;
-                    pgn.moves.push_str(trimmed);
                 }
                 _ => {
                     self.state = ReaderState::Ended;
-                    return ReadOutcome::ParseError(SimpleError::new(format!(
-                        "Unexpected line ({}): {}",
-                        self.line_number, line
-                    )));
+                    return ReadOutcome::Error(simple_error!(
+                        "Line {}: Unexpected line: {}",
+                        self.line_number,
+                        line
+                    ));
                 }
             }
         }
