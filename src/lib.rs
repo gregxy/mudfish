@@ -1,6 +1,4 @@
-mod pgn;
-pub use pgn::*;
-
+pub mod pgn;
 pub mod store;
 
 #[cfg(test)]

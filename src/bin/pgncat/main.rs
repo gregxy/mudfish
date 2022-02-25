@@ -2,7 +2,7 @@ use std::path::Path;
 
 use mudfish::store::PostgresStore;
 
-use mudfish::{PgnReader, ReadOutcome};
+use mudfish::pgn::{PgnReader, ReadOutcome};
 
 use clap::{ArgEnum, Parser};
 
