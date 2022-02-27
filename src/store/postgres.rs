@@ -15,12 +15,15 @@ pub struct PostgresStore {
 
 impl PostgresStore {
     pub fn open<S: Into<String>>(target: &str, table: S) -> SimpleResult<Self> {
-        let mut config = postgres::config::Config::from_str(target).map_err(|e| simple_error!(e.to_string()))?;
+        let mut config =
+            postgres::config::Config::from_str(target).map_err(|e| simple_error!(e.to_string()))?;
         if config.get_user().is_none() {
             config.user(whoami::username().as_str());
         }
 
-        let client = config.connect(NoTls).map_err(|e| simple_error!(e.to_string()))?;
+        let client = config
+            .connect(NoTls)
+            .map_err(|e| simple_error!(e.to_string()))?;
 
         let mut store = Self {
             client,

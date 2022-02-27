@@ -21,3 +21,6 @@ impl RawPgn {
 
 mod reader;
 pub use reader::{PgnReader, ReadOutcome};
+
+mod parser;
+pub use parser::ExtractMove;

@@ -69,7 +69,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match args.output {
                     Output::None => continue,
-                    Output::Stdout => println!("{}\n\n{}\n{}\n", pgn.id, pgn.tags_text, pgn.moves_text),
+                    Output::Stdout => {
+                        println!("{}\n\n{}\n{}\n", pgn.id, pgn.tags_text, pgn.moves_text)
+                    }
                     Output::Postgres => {
                         if let Some(ref mut store) = store_opt {
                             if let Err(err) = store.upsert_pgn(&pgn) {

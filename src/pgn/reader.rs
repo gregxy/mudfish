@@ -151,7 +151,7 @@ impl PgnReader {
                     pgn.moves_text.push('\n');
                 }
                 ReaderState::Tags => {
-                	pgn.moves_text.push_str(trimmed);
+                    pgn.moves_text.push_str(trimmed);
                     pgn.moves_text.push('\n');
                     self.state = ReaderState::Moves;
                 }
