@@ -18,8 +18,7 @@ clap = { version = "3", features = ["derive"], optional = true }
 [features]
 build-binary = ["clap"]
 
-
 [[bin]]
-name = "pgncat"
-path = "src/bin/pgncat/main.rs"
+name = "pgn"
+path = "src/bin/pgn/main.rs"
 required-features = ["build-binary"]
