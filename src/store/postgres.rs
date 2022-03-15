@@ -4,6 +4,7 @@ use postgres::{Client, NoTls};
 use simple_error::simple_error;
 use simple_error::SimpleResult;
 
+use super::tables;
 use crate::pgn::RawPgn;
 
 pub struct PostgresStore {
@@ -28,42 +29,19 @@ impl PostgresStore {
             empty: String::new(),
         };
 
-        store.create_table()?;
+        store.create_tables()?;
 
         Ok(store)
     }
 
-    fn create_table(&mut self) -> SimpleResult<()> {
-        let statement =
-            "CREATE TABLE IF NOT EXISTS {} (
-                    id          VARCHAR(255)    NOT NULL PRIMARY KEY,
-                    event       TEXT            DEFAULT '',
-                    site        TEXT            DEFAULT '',
-                    round       TEXT            DEFAULT '',
-                    date        VARCHAR(31)     DEFAULT '',
-                    time        VARCHAR(31)     DEFAULT '',
-                    time_control    VARCHAR(63)	DEFAULT '',
-                    white       VARCHAR(255)    NOT NULL,
-                    white_title VARCHAR(7)      DEFAULT '',
-                    white_elo   INT             DEFAULT 0,
-                    white_fide  INT             DEFAULT 0,
-                    black       VARCHAR(255)    NOT NULL,
-                    black_title VARCHAR(7)      DEFAULT '',
-                    black_elo   INT             DEFAULT 0,
-                    black_fide  INT             DEFAULT 0,
-                    eco         VARCHAR(7)      DEFAULT '',
-                    opening     TEXT            DEFAULT '',
-                    variation   TEXT            DEFAULT '',
-                    result      VARCHAR(15)     DEFAULT '',
-                    tags        TEXT            NOT NULL,
-                    moves       TEXT            NOT NULL
-                )";
-
-        return self
-            .client
-            .execute(statement, &[])
-            .map(|_| ())
-            .map_err(|err| simple_error!(err.to_string()));
+    fn create_tables(&mut self) -> SimpleResult<()> {
+        for migration in tables::pgn::get_migrations() {
+            let done = (migration.test)(&mut self.client)?;
+            if !done {
+                (migration.apply)(&mut self.client)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn upsert_pgn(&mut self, pgn: &RawPgn) -> SimpleResult<()> {
@@ -138,7 +116,8 @@ impl PostgresStore {
             .client
             .execute(
                 statement,
-                &[  &pgn.id,
+                &[
+                    &pgn.id,
                     pgn.tags.get("Event").unwrap_or(&self.empty),
                     pgn.tags.get("Site").unwrap_or(&self.empty),
                     pgn.tags.get("Round").unwrap_or(&self.empty),
