@@ -44,10 +44,10 @@ struct StoreCommandArgs {
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct App {
+    pgnfile: String,
+
     #[clap(subcommand)]
     command: Commands,
-
-    pgnfile: String,
 }
 
 fn store_pgn(
@@ -75,6 +75,10 @@ fn store_pgn(
             }
             ReadOutcome::Ended => return Ok(()),
             ReadOutcome::Error(err) => return Err(Box::new(err)),
+            ReadOutcome::KnownBadRecord(pgn) => {
+                println!("{} -- KnownBadRecord\n\n{}\n{}\n", pgn.id, pgn.tags_text, pgn.moves_text);
+                continue;
+            }
         }
     }
 }
@@ -97,6 +101,10 @@ fn cat_pgn(args: &CatCommandArgs, mut reader: PgnReader) -> Result<(), Box<dyn s
             }
             ReadOutcome::Ended => return Ok(()),
             ReadOutcome::Error(err) => return Err(Box::new(err)),
+            ReadOutcome::KnownBadRecord(pgn) => {
+                println!("{} -- KnownBadRecord\n\n{}\n{}\n", pgn.id, pgn.tags_text, pgn.moves_text);
+                continue;
+            }
         }
     }
 }
@@ -118,6 +126,10 @@ fn validate_pgn(
                 return Ok(());
             }
             ReadOutcome::Error(err) => return Err(Box::new(err)),
+            ReadOutcome::KnownBadRecord(pgn) => {
+                println!("{} -- KnownBadRecord\n\n{}\n{}\n", pgn.id, pgn.tags_text, pgn.moves_text);
+                continue;
+            }
         }
     }
 }

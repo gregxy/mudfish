@@ -25,7 +25,7 @@ impl Default for ExtractMove {
         let item = format!(r#"(?:{index}\s+{m}(?:\s+{m})?)"#, index = RE_INDEX, m = m);
 
         let full = format!(
-            r#"{item}(?:\s+{item})*\s+(?P<result>{result})"#,
+            r#"(?:{item}(?:\s+{item})*\s+)?(?P<result>{result})"#,
             item = item,
             result = RE_RESULT
         );
@@ -38,10 +38,6 @@ impl Default for ExtractMove {
 }
 
 impl ExtractMove {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn extract(&self, text: &str) -> Option<(Vec<String>, String)> {
         let fullcap = self.full_re.captures(text);
 
@@ -50,7 +46,7 @@ impl ExtractMove {
         let mut moves: Vec<String> = Vec::new();
         for cap in self.move_re.captures_iter(text) {
             moves.push(cap[1].to_string());
-            if cap.len() == 3 {
+            if cap.get(2).is_some() {
                 moves.push(cap[2].to_string());
             }
         }

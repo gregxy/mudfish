@@ -9,7 +9,8 @@ use simple_error::simple_error;
 use simple_error::SimpleError;
 use simple_error::SimpleResult;
 
-use crate::pgn::RawPgn;
+use super::parser::ExtractMove;
+use super::RawPgn;
 
 #[derive(PartialEq, Debug)]
 enum ReaderState {
@@ -27,11 +28,13 @@ pub struct PgnReader {
     line_number: usize,
     count: usize,
     last_pgn: Option<RawPgn>,
+    extractor: ExtractMove,
 }
 
 #[derive(Debug)]
 pub enum ReadOutcome {
     Game(RawPgn),
+    KnownBadRecord(RawPgn),
     Ended,
     Error(SimpleError),
 }
@@ -64,6 +67,7 @@ impl PgnReader {
             line_number: 0,
             count: 0,
             last_pgn: None,
+            extractor: ExtractMove::default(),
         })
     }
 
@@ -99,7 +103,8 @@ impl PgnReader {
                 match self.state {
                     ReaderState::Moves => {
                         self.state = ReaderState::Ended;
-                        return ReadOutcome::Game(pgn);
+
+                        return self.parse(pgn);
                     }
                     ReaderState::Tags => {
                         self.state = ReaderState::Ended;
@@ -133,7 +138,7 @@ impl PgnReader {
                         new_pgn.tags_text.push('\n');
                         self.last_pgn = Some(new_pgn);
 
-                        return ReadOutcome::Game(pgn);
+                        return self.parse(pgn);
                     }
                     _ => {
                         self.state = ReaderState::Tags;
@@ -162,6 +167,40 @@ impl PgnReader {
                         self.line_number,
                         line
                     ));
+                }
+            }
+        }
+    }
+
+    fn parse(&self, pgn: RawPgn) -> ReadOutcome {
+        match pgn.tags.get("Result") {
+            None => ReadOutcome::Error(simple_error!(
+                "Line {}: Missing result tag",
+                self.line_number
+            )),
+            Some(result_tag) => {
+                if result_tag == "0-0" {
+                    return ReadOutcome::KnownBadRecord(pgn);
+                }
+
+                let extracted = self.extractor.extract(pgn.moves_text.as_str());
+                if extracted.is_none() {
+                    return ReadOutcome::Error(simple_error!(
+                        "Line {}: Cannot parse move text",
+                        self.line_number
+                    ));
+                }
+
+                let (_, result) = extracted.unwrap();
+                if &result != result_tag {
+                    ReadOutcome::Error(simple_error!(
+                        "Line {}: Result tag ({}) != result sentinel ({})",
+                        self.line_number,
+                        result_tag,
+                        result
+                    ))
+                } else {
+                    ReadOutcome::Game(pgn)
                 }
             }
         }
