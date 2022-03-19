@@ -1,11 +1,9 @@
 use std::str::FromStr;
 
 use postgres::{Client, NoTls};
-use simple_error::simple_error;
-use simple_error::SimpleResult;
 
 use super::tables;
-use crate::pgn::RawPgn;
+use crate::pgn::Pgn;
 
 pub struct PostgresStore {
     client: Client,
@@ -13,16 +11,13 @@ pub struct PostgresStore {
 }
 
 impl PostgresStore {
-    pub fn open(target: &str) -> SimpleResult<Self> {
-        let mut config =
-            postgres::config::Config::from_str(target).map_err(|e| simple_error!(e.to_string()))?;
+    pub fn open(target: &str) -> Result<Self, postgres::error::Error> {
+        let mut config = postgres::config::Config::from_str(target)?;
         if config.get_user().is_none() {
             config.user(whoami::username().as_str());
         }
 
-        let client = config
-            .connect(NoTls)
-            .map_err(|e| simple_error!(e.to_string()))?;
+        let client = config.connect(NoTls)?;
 
         let mut store = Self {
             client,
@@ -34,7 +29,7 @@ impl PostgresStore {
         Ok(store)
     }
 
-    fn create_tables(&mut self) -> SimpleResult<()> {
+    fn create_tables(&mut self) -> Result<(), postgres::error::Error> {
         for migration in tables::pgn::get_migrations() {
             let done = (migration.test)(&mut self.client)?;
             if !done {
@@ -44,7 +39,7 @@ impl PostgresStore {
         Ok(())
     }
 
-    pub fn upsert_pgn(&mut self, pgn: &RawPgn) -> SimpleResult<()> {
+    pub fn upsert_pgn(&mut self, pgn: &Pgn) -> Result<(), postgres::error::Error> {
         let statement = "INSERT INTO pgn (
                 id,
                 event,
@@ -140,8 +135,7 @@ impl PostgresStore {
                     &pgn.moves_text,
                 ],
             )
-            .map(|_| ())
-            .map_err(|err| simple_error!(err.to_string()));
+            .map(|_| ());
     }
 }
 

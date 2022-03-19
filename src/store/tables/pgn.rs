@@ -1,7 +1,5 @@
 use super::Migration;
 
-use simple_error::simple_error;
-
 pub fn get_migrations() -> Vec<Migration> {
     return vec![Migration {
         test: |client| {
@@ -9,10 +7,7 @@ pub fn get_migrations() -> Vec<Migration> {
     				SELECT FROM pg_tables
     				WHERE schemaname = 'public' AND tablename  = 'pgn'";
 
-            client
-                .query_opt(statement, &[])
-                .map(|opt| opt.is_some())
-                .map_err(|e| simple_error!(e.to_string()))
+            client.query_opt(statement, &[]).map(|opt| opt.is_some())
         },
         apply: |client| {
             let statement = "CREATE TABLE pgn (
@@ -37,10 +32,7 @@ pub fn get_migrations() -> Vec<Migration> {
 	                    result      VARCHAR(15)     DEFAULT '',
 	                    tags        TEXT            NOT NULL,
 	                    moves       TEXT            NOT NULL)";
-            client
-                .execute(statement, &[])
-                .map(|_| ())
-                .map_err(|e| simple_error!(e.to_string()))
+            client.execute(statement, &[]).map(|_| ())
         },
     }];
 }

@@ -1,9 +1,8 @@
 use postgres::Client;
-use simple_error::SimpleResult;
 
 pub struct Migration {
-    pub test: fn(&mut Client) -> SimpleResult<bool>,
-    pub apply: fn(&mut Client) -> SimpleResult<()>,
+    pub test: fn(&mut Client) -> Result<bool, postgres::error::Error>,
+    pub apply: fn(&mut Client) -> Result<(), postgres::error::Error>,
 }
 
 pub(crate) mod pgn;

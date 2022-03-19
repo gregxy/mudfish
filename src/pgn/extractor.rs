@@ -1,18 +1,18 @@
 use regex::Regex;
 
 const RE_SAN: &str = r#"(?:[PNBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[PNBRQK])?[\+\#]?)"#;
-const RE_INDEX: &str = r#"(?:\d+\.+)"#;
+const RE_INDEX: &str = r#"(?:(\d+)\.+)"#;
 const RE_CASTLE: &str = r#"(?:O-O(?:-O)?[\+\#]?)"#;
 const RE_SUFFIX: &str = r#"(?:[!?][!?]?)"#;
 const RE_ANNOTATION: &str = r#"(?:\{[^{]+\})"#;
 const RE_RESULT: &str = r#"((?:0-1)|(?:1-0)|(?:1/2-1/2)|\*)"#;
 
-pub struct ExtractMove {
+pub struct Extractor {
     full_re: Regex,
     move_re: Regex,
 }
 
-impl Default for ExtractMove {
+impl Default for Extractor {
     fn default() -> Self {
         let m = format!(
             r#"(?:({san}|{castle}){suffix}?(?:\s*{annotation})?)"#,
@@ -37,21 +37,25 @@ impl Default for ExtractMove {
     }
 }
 
-impl ExtractMove {
-    pub fn extract(&self, text: &str) -> Option<(Vec<String>, String)> {
+impl Extractor {
+    pub fn extract(&self, text: &str) -> Option<(Vec<String>, usize, String)> {
         let fullcap = self.full_re.captures(text);
 
         let result = fullcap?["result"].to_string();
 
+        let mut last_index: usize = 0;
         let mut moves: Vec<String> = Vec::new();
+
         for cap in self.move_re.captures_iter(text) {
-            moves.push(cap[1].to_string());
-            if cap.get(2).is_some() {
-                moves.push(cap[2].to_string());
+            last_index = cap[1].parse::<usize>().unwrap();
+
+            moves.push(cap[2].to_string());
+            if cap.get(3).is_some() {
+                moves.push(cap[3].to_string());
             }
         }
 
-        Some((moves, result))
+        Some((moves, last_index, result))
     }
 }
 

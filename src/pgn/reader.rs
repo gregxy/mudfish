@@ -5,12 +5,9 @@ use std::path::Path;
 
 use bzip2::read::BzDecoder;
 use regex::Regex;
-use simple_error::simple_error;
-use simple_error::SimpleError;
-use simple_error::SimpleResult;
 
-use super::parser::ExtractMove;
-use super::RawPgn;
+use super::extractor::Extractor;
+use super::Pgn;
 
 #[derive(PartialEq, Debug)]
 enum ReaderState {
@@ -20,28 +17,28 @@ enum ReaderState {
     Ended,
 }
 
-pub struct PgnReader {
+pub struct Reader {
     prefix: String,
     buf: Box<dyn BufRead>,
     state: ReaderState,
     re_tag: Regex,
     line_number: usize,
     count: usize,
-    last_pgn: Option<RawPgn>,
-    extractor: ExtractMove,
+    last_pgn: Option<Pgn>,
+    extractor: Extractor,
 }
 
 #[derive(Debug)]
 pub enum ReadOutcome {
-    Game(RawPgn),
-    KnownBadRecord(RawPgn),
+    Game(Pgn),
+    BadPgn(String),
     Ended,
-    Error(SimpleError),
+    Error(String),
 }
 
-impl PgnReader {
-    pub fn new(path: &Path) -> SimpleResult<Self> {
-        let f = File::open(path).map_err(|e| simple_error!(e.to_string()))?;
+impl Reader {
+    pub fn new(path: &Path) -> std::io::Result<Self> {
+        let f = File::open(path)?;
 
         let buf: Box<dyn BufRead> = if path.extension().unwrap() == "bz2" {
             Box::new(BufReader::new(BzDecoder::new(f)))
@@ -67,7 +64,7 @@ impl PgnReader {
             line_number: 0,
             count: 0,
             last_pgn: None,
-            extractor: ExtractMove::default(),
+            extractor: Extractor::default(),
         })
     }
 
@@ -80,7 +77,7 @@ impl PgnReader {
             self.last_pgn.take().unwrap()
         } else {
             self.count += 1;
-            RawPgn::new(self.prefix.as_str(), self.count)
+            Pgn::new(self.prefix.as_str(), self.count)
         };
 
         loop {
@@ -91,11 +88,7 @@ impl PgnReader {
 
             if let Err(e) = read_result {
                 self.state = ReaderState::Ended;
-                return ReadOutcome::Error(simple_error!(
-                    "Line {}: {}",
-                    self.line_number,
-                    e.to_string()
-                ));
+                return ReadOutcome::Error(format!("Line {}: {}", self.line_number, e));
             }
 
             if read_result.unwrap() == 0 {
@@ -104,11 +97,11 @@ impl PgnReader {
                     ReaderState::Moves => {
                         self.state = ReaderState::Ended;
 
-                        return self.parse(pgn);
+                        return self.postprocess(pgn);
                     }
                     ReaderState::Tags => {
                         self.state = ReaderState::Ended;
-                        return ReadOutcome::Error(simple_error!(
+                        return ReadOutcome::Error(format!(
                             "Line {}: Ended unexpectedly.",
                             self.line_number
                         ));
@@ -130,7 +123,7 @@ impl PgnReader {
                     ReaderState::Moves => {
                         self.state = ReaderState::Tags;
                         self.count += 1;
-                        let mut new_pgn = RawPgn::new(self.prefix.as_str(), self.count);
+                        let mut new_pgn = Pgn::new(self.prefix.as_str(), self.count);
                         new_pgn
                             .tags
                             .insert(caps[1].to_string(), caps[2].to_string());
@@ -138,7 +131,7 @@ impl PgnReader {
                         new_pgn.tags_text.push('\n');
                         self.last_pgn = Some(new_pgn);
 
-                        return self.parse(pgn);
+                        return self.postprocess(pgn);
                     }
                     _ => {
                         self.state = ReaderState::Tags;
@@ -162,47 +155,66 @@ impl PgnReader {
                 }
                 _ => {
                     self.state = ReaderState::Ended;
-                    return ReadOutcome::Error(simple_error!(
+                    return ReadOutcome::Error(format!(
                         "Line {}: Unexpected line: {}",
-                        self.line_number,
-                        line
+                        self.line_number, line
                     ));
                 }
             }
         }
     }
 
-    fn parse(&self, pgn: RawPgn) -> ReadOutcome {
-        match pgn.tags.get("Result") {
-            None => ReadOutcome::Error(simple_error!(
-                "Line {}: Missing result tag",
-                self.line_number
-            )),
-            Some(result_tag) => {
-                if result_tag == "0-0" {
-                    return ReadOutcome::KnownBadRecord(pgn);
-                }
+    fn badpgn(&self, pgn: &Pgn, message: String) -> ReadOutcome {
+        return ReadOutcome::BadPgn(format!(
+            "Line {}: invalid pgn: {}\n{}\n{}\n",
+            self.line_number, message, pgn.tags_text, pgn.moves_text
+        ));
+    }
 
-                let extracted = self.extractor.extract(pgn.moves_text.as_str());
-                if extracted.is_none() {
-                    return ReadOutcome::Error(simple_error!(
-                        "Line {}: Cannot parse move text",
-                        self.line_number
-                    ));
-                }
-
-                let (_, result) = extracted.unwrap();
-                if &result != result_tag {
-                    ReadOutcome::Error(simple_error!(
-                        "Line {}: Result tag ({}) != result sentinel ({})",
-                        self.line_number,
-                        result_tag,
-                        result
-                    ))
-                } else {
-                    ReadOutcome::Game(pgn)
-                }
-            }
+    fn postprocess(&self, mut pgn: Pgn) -> ReadOutcome {
+        let result_tag_opt = pgn.tags.get("Result");
+        if result_tag_opt.is_none() {
+            return self.badpgn(&pgn, "missing result tag".to_string());
         }
+
+        let result_tag = result_tag_opt.unwrap();
+        if result_tag != "1-0"
+            && result_tag != "0-1"
+            && result_tag != "1/2-1/2"
+            && result_tag != "*"
+        {
+            return self.badpgn(&pgn, format!("bad result tag ({})", result_tag));
+        }
+
+        let extracted = self.extractor.extract(pgn.moves_text.as_str());
+        if extracted.is_none() {
+            return self.badpgn(&pgn, "cannot extract move list".to_string());
+        }
+
+        let (moves, last_index, result) = extracted.unwrap();
+        if &result != result_tag {
+            return self.badpgn(
+                &pgn,
+                format!(
+                    "result tag ({}) != result sentinel ({})",
+                    result_tag, result
+                ),
+            );
+        }
+
+        if last_index * 2 != moves.len() && last_index * 2 + 1 != moves.len() {
+            return self.badpgn(
+                &pgn,
+                format!(
+                    "last move index == {}, but # of moves (white + black) == {}",
+                    last_index,
+                    moves.len()
+                ),
+            );
+        }
+
+        pgn.moves = moves;
+
+        ReadOutcome::Game(pgn)
     }
 }
