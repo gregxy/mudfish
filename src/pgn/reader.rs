@@ -1,10 +1,11 @@
+use bzip2::read::BzDecoder;
+use regex::Regex;
+use seahash::SeaHasher;
 use std::fs::File;
+use std::hash::Hasher;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::Path;
-
-use bzip2::read::BzDecoder;
-use regex::Regex;
 
 use super::extractor::Extractor;
 use super::Pgn;
@@ -214,7 +215,18 @@ impl Reader {
         }
 
         pgn.moves = moves;
+        pgn.moves_fingerprint = moves_fingerprint(&pgn.moves);
 
         ReadOutcome::Game(pgn)
     }
+}
+
+fn moves_fingerprint(moves: &Vec<String>) -> u64 {
+    let mut hasher = SeaHasher::new();
+
+    for m in moves.iter() {
+        hasher.write(m.as_bytes());
+    }
+
+    return hasher.finish();
 }

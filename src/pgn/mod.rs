@@ -7,6 +7,7 @@ pub struct Pgn {
     pub moves: Vec<String>,
     pub tags_text: String,
     pub moves_text: String,
+    pub moves_fingerprint: u64,
 }
 
 impl Pgn {
@@ -17,6 +18,7 @@ impl Pgn {
             tags_text: String::new(),
             moves_text: String::new(),
             moves: Vec::new(),
+            moves_fingerprint: 0,
         }
     }
 }
