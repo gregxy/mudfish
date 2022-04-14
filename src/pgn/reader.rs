@@ -203,7 +203,7 @@ impl Reader {
             );
         }
 
-        if last_index * 2 != moves.len() && last_index * 2 + 1 != moves.len() {
+        if last_index * 2 != moves.len() && last_index * 2 - 1 != moves.len() {
             return self.badpgn(
                 &pgn,
                 format!(

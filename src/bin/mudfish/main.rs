@@ -112,10 +112,18 @@ fn read_pgn(args: &ReadPgnArgs) -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if args.end > 0 && count >= args.end {
+                	if args.count {
+                		println!("{}", count);
+                	}
                     return Ok(());
                 }
             }
-            ReadOutcome::Ended => return Ok(()),
+            ReadOutcome::Ended => {
+            	if args.count {
+            		println!("{}", count);
+            	}
+            	return Ok(());
+            }
             ReadOutcome::BadPgn(message) => {
                 println!("{}", message);
                 continue;
